@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Camera Capture</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            position: relative;
+            max-width: 100%;
+            width: 800px;
+            margin: 20px auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        #videoElement {
+            width: 100%;
+            height: auto;
+            background-color: #000;
+            transform: scaleX(-1);
+        }
+
+        .controls {
+            margin: 15px 0;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 140px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .zoom-control {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .zoom-slider {
+            width: 180px;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            appearance: none;
+        }
+
+        .zoom-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #007bff;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .zoom-label {
+            color: #444;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .preview-container {
+            margin: 20px 0;
+            text-align: center;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        #previewImage {
+            max-width: 100%;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border: 3px solid white;
+        }
+
+        .download-link {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            transition: background 0.3s ease;
+        }
+
+        .download-link:hover {
+            background-color: #218838;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            button {
+                width: 100%;
+                padding: 14px;
+            }
+
+            .zoom-slider {
+                width: 140px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <video id="videoElement" playsinline autoplay></video>
+    </div>
+
+    <div class="controls">
+        <button id="captureButton">Capture Photo</button>
+        <div class="zoom-control">
+            <input type="range" id="zoomSlider" class="zoom-slider" min="1" max="4" step="0.1" value="1">
+            <div class="zoom-label">Zoom: <span id="zoomValue">1x</span></div>
+        </div>
+    </div>
+
+    <div class="preview-container">
+        <img id="previewImage" alt="Captured preview">
+        <a id="downloadLink" class="download-link" style="display: none;">Download Photo</a>
+    </div>
+
+    <script>
+        const video = document.getElementById('videoElement');
+        const captureButton = document.getElementById('captureButton');
+        const previewImage = document.getElementById('previewImage');
+        const downloadLink = document.getElementById('downloadLink');
+        const zoomSlider = document.getElementById('zoomSlider');
+        const zoomValue = document.getElementById('zoomValue');
+        let stream;
+        let videoTrack;
+
+        // Camera constraints
+        const constraints = {
+            video: {
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+                facingMode: 'environment',
+                advanced: [
+                    { aspectRatio: 16 / 9 },
+                    { focusMode: 'continuous' },
+                    { focusMode: 'single-shot' }
+                ]
+            }
+        };
+
+        // Initialize camera
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                videoTrack = stream.getVideoTracks()[0];
+
+                await new Promise(resolve => video.onloadedmetadata = resolve);
+
+                setupZoom();
+                adjustAspectRatio();
+                setupFocus();
+            } catch (err) {
+                handleCameraError(err);
+            }
+        }
+
+        // Zoom functionality
+        function setupZoom() {
+            const capabilities = videoTrack.getCapabilities();
+
+            if (capabilities.zoom) {
+                zoomSlider.min = capabilities.zoom.min || 1;
+                zoomSlider.max = capabilities.zoom.max || 4;
+                zoomSlider.step = capabilities.zoom.step || 0.1;
+                zoomSlider.value = videoTrack.getSettings().zoom || 1;
+
+                zoomSlider.addEventListener('input', async () => {
+                    try {
+                        await videoTrack.applyConstraints({
+                            advanced: [{ zoom: parseFloat(zoomSlider.value) }]
+                        });
+                        zoomValue.textContent = `${parseFloat(zoomSlider.value).toFixed(1)}x`;
+                    } catch (err) {
+                        console.error('Zoom error:', err);
+                    }
+                });
+            } else {
+                zoomSlider.disabled = true;
+                zoomValue.textContent = 'Zoom Not Available';
+            }
+        }
+
+        // Touch-to-focus functionality
+        function setupFocus() {
+            video.addEventListener('click', async (event) => {
+                if (!videoTrack) return;
+
+                const capabilities = videoTrack.getCapabilities();
+                const settings = videoTrack.getSettings();
+
+                if (capabilities.focusMode && capabilities.focusMode.includes('manual')) {
+                    const rect = video.getBoundingClientRect();
+                    const x = (event.clientX - rect.left) / rect.width;
+                    const y = (event.clientY - rect.top) / rect.height;
+
+                    try {
+                        await videoTrack.applyConstraints({
+                            advanced: [{
+                                focusMode: 'manual',
+                                pointsOfInterest: [{ x, y }]
+                            }]
+                        });
+                        showFocusEffect(event.clientX, event.clientY);
+                    } catch (err) {
+                        console.error('Focus error:', err);
+                    }
+                }
+            });
+        }
+
+        // Visual feedback for focus
+        function showFocusEffect(x, y) {
+            const effect = document.createElement('div');
+            effect.style.position = 'fixed';
+            effect.style.left = `${x - 25}px`;
+            effect.style.top = `${y - 25}px`;
+            effect.style.width = '50px';
+            effect.style.height = '50px';
+            effect.style.border = '2px solid #00ff00';
+            effect.style.borderRadius = '50%';
+            effect.style.animation = 'focusPulse 1s ease-out';
+            document.body.appendChild(effect);
+
+            setTimeout(() => effect.remove(), 1000);
+        }
+
+        // Capture and crop image
+        function captureImage() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Calculate 16:9 crop
+            const sourceAspect = video.videoWidth / video.videoHeight;
+            const targetAspect = 16 / 9;
+            let sx = 0, sy = 0, sw = video.videoWidth, sh = video.videoHeight;
+
+            if (sourceAspect > targetAspect) {
+                sw = sh * targetAspect;
+                sx = (video.videoWidth - sw) / 2;
+            } else {
+                sh = sw / targetAspect;
+                sy = (video.videoHeight - sh) / 2;
+            }
+
+            canvas.width = sw;
+            canvas.height = sh;
+            ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+
+            // Generate output
+            const imageUrl = canvas.toDataURL('image/jpeg', 0.95);
+            previewImage.src = imageUrl;
+            downloadLink.href = imageUrl;
+            downloadLink.download = `photo_${Date.now()}.jpg`;
+            downloadLink.style.display = 'inline-block';
+        }
+
+        // Aspect ratio maintenance
+        function adjustAspectRatio() {
+            const container = document.querySelector('.container');
+            container.style.height = `${container.clientWidth / (16 / 9)}px`;
+        }
+
+        // Error handling
+        function handleCameraError(err) {
+            console.error('Camera Error:', err);
+            alert(`Camera access failed: ${err.message}`);
+            captureButton.disabled = true;
+        }
+
+        // Event listeners
+        captureButton.addEventListener('click', captureImage);
+        window.addEventListener('resize', adjustAspectRatio);
+
+        // Add focus animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes focusPulse {
+                0% { transform: scale(1); opacity: 1; }
+                100% { transform: scale(2); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Start the camera
+        startCamera();
+    </script>
+</body>
+
+</html>
