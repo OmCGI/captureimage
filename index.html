@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>16:9 Image Capture</title>
+    <style>
+        body {
+            margin: 0;
+
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+        }
+
+        .container {
+            position: relative;
+            max-width: 100%;
+            width: 100vw;
+
+        }
+
+        #videoElement {
+            position: relative;
+            width: 100%;
+            height: auto;
+            background-color: #000;
+
+
+            /* Flip video mirror-style */
+        }
+
+        #captureButton {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1;
+
+
+            padding: 12px 24px;
+            font-size: 18px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 20px 0;
+        }
+
+        #captureButton:hover {
+            background-color: #0056b3;
+        }
+
+        .preview-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        #previewImage {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .download-link {
+            display: block;
+            margin-top: 10px;
+            color: #007bff;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <video id="videoElement" playsinline autoplay></video>
+        <button id="captureButton">Capture </button>
+    </div>
+
+    <div class="preview-container">
+        <img id="previewImage" alt="Captured preview">
+        <a id="downloadLink" class="download-link" style="display: none;">Download Image</a>
+    </div>
+
+    <script>
+        const video = document.getElementById('videoElement');
+        const captureButton = document.getElementById('captureButton');
+        const previewImage = document.getElementById('previewImage');
+        const downloadLink = document.getElementById('downloadLink');
+        let stream;
+
+        // Set up video constraints
+        const constraints = {
+            video: {
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+                facingMode: 'environment',
+                advanced: [{ aspectRatio: 16 / 9 }]
+            }
+        };
+
+        // Start video stream
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+
+                // Wait for video metadata to load
+                await new Promise(resolve => video.onloadedmetadata = resolve);
+
+                // Handle aspect ratio adjustment
+                adjustAspectRatio();
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                alert('Error accessing camera. Please ensure permissions are granted.');
+            }
+        }
+
+        function adjustAspectRatio() {
+            const container = document.querySelector('.container');
+            const aspectRatio = 16 / 9;
+            const containerWidth = container.clientWidth;
+            container.style.height = `${containerWidth / aspectRatio}px`;
+        }
+
+        // Capture image
+        function captureImage() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Calculate crop dimensions for 16:9
+            const sourceAspect = video.videoWidth / video.videoHeight;
+            const targetAspect = 16 / 9;
+
+            let sx = 0, sy = 0, sw = video.videoWidth, sh = video.videoHeight;
+
+            if (sourceAspect > targetAspect) {
+                // Crop width
+                sw = sh * targetAspect;
+                sx = (video.videoWidth - sw) / 2;
+            } else {
+                // Crop height
+                sh = sw / targetAspect;
+                sy = (video.videoHeight - sh) / 2;
+            }
+
+            // Set canvas dimensions
+            canvas.width = sw;
+            canvas.height = sh;
+
+            // Draw cropped image
+            ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+
+            // Convert to JPEG
+            const imageUrl = canvas.toDataURL('image/jpeg', 1.0);
+
+            // Show preview and download link
+            previewImage.src = imageUrl;
+            downloadLink.href = imageUrl;
+            downloadLink.download = `capture_${Date.now()}.jpg`;
+            downloadLink.style.display = 'block';
+        }
+
+        // Event Listeners
+        captureButton.addEventListener('click', captureImage);
+        window.addEventListener('resize', adjustAspectRatio);
+
+        // Initialize
+        startCamera();
+    </script>
+</body>
+
+</html>
